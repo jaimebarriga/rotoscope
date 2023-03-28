@@ -59,7 +59,7 @@ class Rotoscope
       @thread = Thread.current
 
       @files = Set.new()
-      @test_name = nil
+      @test_file = nil
 
       if detailed
         @io << HEADER
@@ -82,7 +82,18 @@ class Rotoscope
     end
 
     def stop_trace()
+      # If we are stopping trace and there are still files to be processed, process them
+      process_files()
       @rotoscope.stop_trace
+    end
+
+    def process_files()
+      if @files.length > 0 && !@test_file.nil?
+        printFilesSet()
+        # Reset state
+        @test_file = nil
+        @files = Set.new()
+      end
     end
 
     def mark(message = "")
@@ -92,24 +103,27 @@ class Rotoscope
         @rotoscope.stop_trace
       end
       if @pid == Process.pid && @thread == Thread.current
-        printFilesSet()
-        # @io.write("--- ")
-        # @io.puts(message)
-
-        @test_name = message
-        @files = Set.new()
+        # Only output once a new file is being run
+        if message != @test_file
+          # This will process files and reset state
+          process_files()
+          # Update state to new message
+          @test_file = message
+        end
       end
     ensure
       @rotoscope.start_trace if was_tracing
     end
 
-    def printFilesSet
+    def printFilesSet()
       @files.each do |file|
+        # pattern = /(\'|\"|\.|\*|\/|\-|\\)/
+        # test_file = @test_file.gsub(pattern){|match|"\\"  + match}.gsub("\n", "") # \\n
         buffer = @output_buffer
         buffer.clear
         buffer <<
           '"' << file << '",' \
-            '"' << @test_name.to_s << '"' << "\n"
+            '"' << @test_file.to_s << '"' << "\n"
         io.write(buffer)
       end
     end
@@ -167,7 +181,7 @@ class Rotoscope
         if !prefix_to_exclude.nil?
           caller_path = caller_path.sub(Regexp.new(prefix_to_exclude), "")
         end
-        if @pid == Process.pid && @thread == Thread.current && !@test_name.nil?
+        if @pid == Process.pid && @thread == Thread.current && !@test_file.nil?
           @files.add(caller_path)
         end
       end
